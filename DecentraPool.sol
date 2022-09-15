@@ -21,6 +21,14 @@ contract DecentraPool is ERC721URIStorage, Ownable {
         _;
     }
 
+    modifier notSeller(uint256 tokenId){
+        require(
+            msg.sender != marketTokens[tokenId].seller,
+            "seller cannot buy own token"
+        );
+        _;
+    }
+
     event TokenMinted(address indexed creator, uint256 tokenId);
     event BuyToken(uint256 tokenId);
     event ClaimContractFunds();
@@ -90,38 +98,22 @@ contract DecentraPool is ERC721URIStorage, Ownable {
     }
 
     // A function to buy token with payment in ethers in case the user don't have enough coins  
-    function buyTokenWithFund(uint256 tokenId) public payable {
+    function buyTokenWithFund(uint256 tokenId) public payable notSeller(tokenId){
         uint256 cost = marketTokens[tokenId].value;
-        require(
-            msg.sender != marketTokens[tokenId].seller,
-            "seller cannot buy own token"
-        );
         require(
             msg.value >= cost * (1 ether / 100),
             "funds not enough for purchase"
         );
         // 1 coin == 1/100 ether
-
         address payable seller = marketTokens[tokenId].seller;
-        buyToken(tokenId, msg.sender);
-        usersPurchaseCount[msg.sender]++;
-
         // transfer `cost` to the token seller after successful purchase        
         seller.transfer(msg.value);
+        handlePayChanges(tokenId);
 
-        // reward buyer with 100 points for every 5 purchase
-        uint256 purchaseCount = usersPurchaseCount[msg.sender];
-        if ((purchaseCount > 0) && (purchaseCount % 5 == 0)) {
-            coinsBalance[msg.sender] += 100;
-        }
     }
 
     // buy token with funds
-    function buyTokenWithCoins(uint256 tokenId) public {
-        require(
-            msg.sender != marketTokens[tokenId].seller,
-            "seller cannot buy own token"
-        );
+    function buyTokenWithCoins(uint256 tokenId) public notSeller(tokenId){
         require(
             coinsBalance[msg.sender] >= marketTokens[tokenId].value,
             "insufficient coins"
@@ -129,6 +121,10 @@ contract DecentraPool is ERC721URIStorage, Ownable {
 
         coinsBalance[msg.sender] -= marketTokens[tokenId].value;
         coinsBalance[marketTokens[tokenId].seller] += marketTokens[tokenId].value;
+        handlePayChanges(tokenId);
+    }
+
+    function handlePayChanges(uint256 tokenId) internal {
         buyToken(tokenId, msg.sender);
         usersPurchaseCount[msg.sender]++;
 
@@ -191,6 +187,7 @@ contract DecentraPool is ERC721URIStorage, Ownable {
         }
         return allMarketTokens;
     }
+
 
     // return coins balance of caller
     function getCoinsBalance() public view returns (uint256) {
